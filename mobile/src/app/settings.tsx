@@ -81,6 +81,12 @@ export default function SettingsScreen() {
   const loadVoices = useCallback(async () => {
     setIsLoadingVoices(true);
 
+    if (Platform.OS !== "ios") {
+      setAvailableVoices([]);
+      setIsLoadingVoices(false);
+      return;
+    }
+
     try {
       const voices = await Speech.getAvailableVoicesAsync();
       setAvailableVoices(voices);
