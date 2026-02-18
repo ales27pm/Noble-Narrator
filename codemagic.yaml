@@ -1,15 +1,11 @@
 workflows:
-  expo-ios-testflight:
-    name: Expo iOS → TestFlight (no EAS, uses prebuild)
+  react-native-ios:
+    name: Noble Narrator iOS → TestFlight (Expo prebuild, no EAS)
     max_build_duration: 120
     instance_type: mac_mini_m2
 
     environment:
       groups:
-        # Must exist in Codemagic UI:
-        # - app_store_credentials: APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY
-        # - certificate_credentials: CERTIFICATE_PRIVATE_KEY (and any other signing secrets you store)
-        # - other: any extra vars your app needs (API keys, etc.)
         - app_store_credentials
         - certificate_credentials
         - other
@@ -68,7 +64,6 @@ workflows:
       - name: Fetch signing files from App Store Connect (App Store profile)
         script: |
           set -euo pipefail
-          # Get bundle id from app.json (avoids hardcoding)
           BUNDLE_ID="$(node -e "console.log(require('./mobile/app.json').expo.ios.bundleIdentifier)")"
           echo "BUNDLE_ID=$BUNDLE_ID"
           app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
@@ -78,13 +73,11 @@ workflows:
           set -euo pipefail
           keychain add-certificates
 
-      - name: Bump build number (timestamp, always increasing)
+      - name: Bump build number (timestamp)
         script: |
           set -euo pipefail
           BUILD_NUMBER="$(date +%Y%m%d%H%M)"
           echo "BUILD_NUMBER=$BUILD_NUMBER"
-
-          # Find an Info.plist produced by prebuild and set CFBundleVersion
           PLIST_PATH="$(find mobile/ios -maxdepth 5 -name Info.plist | head -n 1 || true)"
           if [ -z "$PLIST_PATH" ]; then
             echo "ERROR: Info.plist not found under mobile/ios"
@@ -95,7 +88,7 @@ workflows:
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$PLIST_PATH" || \
           /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_NUMBER" "$PLIST_PATH"
 
-      - name: Apply provisioning profiles to Xcode project
+      - name: Apply provisioning profiles
         script: |
           set -euo pipefail
           xcode-project use-profiles --warn-only
@@ -112,7 +105,6 @@ workflows:
           fi
           echo "WORKSPACE=$WORKSPACE"
 
-          # Extract first scheme from xcodebuild -list output (robust enough for CI)
           SCHEME="$(xcodebuild -list -workspace "$WORKSPACE" | awk '
             BEGIN{in_schemes=0}
             /Schemes:/{in_schemes=1; next}
@@ -130,8 +122,6 @@ workflows:
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
-      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
-      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
 
     publishing:
       app_store_connect:
@@ -141,16 +131,13 @@ workflows:
         submit_to_testflight: true
 
 
-  expo-android-release:
-    name: Expo Android (no EAS, uses prebuild)
+  react-native-android:
+    name: Noble Narrator Android (Expo prebuild, no EAS)
     max_build_duration: 60
     instance_type: linux_x2
 
     environment:
       groups:
-        # Must exist in Codemagic UI:
-        # - android_credentials: CM_KEYSTORE (base64), CM_KEYSTORE_PASSWORD, CM_KEY_ALIAS_USERNAME, CM_KEY_ALIAS_PASSWORD
-        # - other: any extra vars your app needs
         - android_credentials
         - other
       node: latest
@@ -197,7 +184,7 @@ workflows:
           set -euo pipefail
           echo "sdk.dir=$ANDROID_SDK_ROOT" > "$FCI_BUILD_DIR/mobile/android/local.properties"
 
-      - name: Set up keystore (from env group android_credentials)
+      - name: Set up keystore
         script: |
           set -euo pipefail
           echo "$CM_KEYSTORE" | base64 --decode > /tmp/keystore.keystore
