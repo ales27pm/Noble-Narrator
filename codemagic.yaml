@@ -1,144 +1,219 @@
 workflows:
-     react-native-android:
-        name: React Native Android
-        max_build_duration: 60
-        instance_type: linux_x2
-        environment:
-            groups:
-                - android_credentials
-                - expo_credentials
-            # vars:
-            #     CM_KEYSTORE: Encrypted() # <-- Put your encrypted keystore file here
-            #     CM_KEYSTORE_PASSWORD: Encrypted() # <-- Put your encrypted keystore password here
-            #     CM_KEY_ALIAS_PASSWORD: Encrypted() # <-- Put your encrypted keystore alias password here
-            #     CM_KEYSTORE_PATH: /tmp/keystore.keystore
-            #     CM_KEY_ALIAS_USERNAME: Encrypted() # <-- Put your encrypted keystore alias username here 
-            #     PACKAGE_NAME: "com.codemagic_react_native"
-            node: 15.13.0
-        scripts:
-            - name: Install npm dependencies
-              script: |
-                npm install
-                mkdir ios
-                cd ios
-                npx pod-install
-                cd ..
-#            - name: Set Android SDK location
-#              script: |
-#                echo "sdk.dir=$ANDROID_SDK_ROOT" > "$FCI_BUILD_DIR/android/local.properties"
-#            - name: Set up keystore
-#              script: |
-#                    echo $CM_KEYSTORE | base64 --decode > /tmp/keystore.keystore
-#                    cat >> "$FCI_BUILD_DIR/android/key.properties" <<EOF
-#                    storePassword=$CM_KEYSTORE_PASSWORD
-#                    keyPassword=$CM_KEY_ALIAS_PASSWORD
-#                    keyAlias=$CM_KEY_ALIAS_USERNAME
-#                    storeFile=/tmp/keystore.keystore
-#                    EOF 
-#            - name: Build Android release
-#              script: |
-#                # Set environment variable so it can be used to increment build number in android/app/build.gradle
-#                # Note that tracks can be specified when retrieving latest build number from Google Play, for example:
-#                # export NEW_BUILD_NUMBER=$(($(google-play get-latest-build-number --package-name "$PACKAGE_NAME" --tracks=alpha) + 1))             
-#                export NEW_BUILD_NUMBER=$(($(firebase-app-distribution get-latest-build-number --package-name "$PACKAGE_NAME") + 1))
-#                cd android && ./gradlew assembleRelease
-            - name: Expo OTA update
-              script: |
-                  npx expo-cli login -u $EXPO_USERNAME -p $EXPO_PASSWORD
-                  npx expo-cli publish --non-interactive --max-workers 1 --release-channel $EXPO_RELEASE_CHANNEL
-  #      artifacts:
-  #          - android/app/build/outputs/**/*.apk
- 
-     react-native-ios:
-        name: React Native iOS
-        max_build_duration: 120
-        instance_type: mac_mini_m2
-        environment:
-            groups:
-            # Add the group environment variables in Codemagic UI (either in Application/Team variables) - https://docs.codemagic.io/variables/environment-variable-groups/
-                - app_store_credentials # <-- (Includes  APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY)
-                  # APP_STORE_CONNECT_ISSUER_ID <-- Put your App Store Connect Issuer Id here 
-                  # APP_STORE_CONNECT_KEY_IDENTIFIER <-- Put your App Store Connect Key Identifier here 
-                  # APP_STORE_CONNECT_PRIVATE_KEY <-- Put your App Store Connect Private Key here
-                  # See the following link for more details - https://docs.codemagic.io/code-signing-yaml/signing-ios/
-                  # https://appstoreconnect.apple.com/access/api
-                - certificate_credentials # <-- (Includes CERTIFICATE_PRIVATE_KEY - Put your Certificate Private Key here)
-                - other
-            vars:
-                XCODE_WORKSPACE: "ios/YOUR_WORKSPACE_NAME.xcworkspace" # <-- Put the name of your Xcode workspace here
-                XCODE_SCHEME: "YOUR_SCHEME_NAME" # <-- Put the name of your Xcode scheme here
-                BUNDLE_ID: "YOUR_BUNDLE_ID_HERE" # <-- Put your Bundle Id here e.g com.domain.myapp
-                APP_STORE_APP_ID: 1555555551 # <-- Put the app id number here. This is found in App Store Connect > App > General > App Information
-            node: latest
-            xcode: latest
-            cocoapods: default
-        triggering:
-            events:
-                - push
-                - tag
-                - pull_request
-            branch_patterns:
-                - pattern: develop
-                  include: true
-                  source: true
-        scripts:
-            - name: Install npm dependencies
-              script: |
-                npm install
-            - name: Install CocoaPods dependencies
-              script: |
-                cd ios && pod install
-            - name: Set up keychain to be used for codesigning using Codemagic CLI 'keychain' command
-              script: |
-                keychain initialize
-            - name: Fetch signing files
-              script: |
-                # For information about Codemagic CLI commands visit: https://github.com/codemagic-ci-cd/cli-tools/blob/master/docs/app-store-connect/README.md
-                # For details about the --type paramater below - https://github.com/codemagic-ci-cd/cli-tools/blob/master/docs/app-store-connect/fetch-signing-files.md#--typeios_app_adhoc--ios_app_development--ios_app_inhouse--ios_app_store--mac_app_development--mac_app_direct--mac_app_store--mac_catalyst_app_development--mac_catalyst_app_direct--mac_catalyst_app_store--tvos_app_adhoc--tvos_app_development--tvos_app_inhouse--tvos_app_store
-                app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
-            - name: Use system default keychain
-              script: |
-                keychain add-certificates
-            - name: Increment build number
-              script: |
-                #!/bin/sh
-                set -e
-                set -x
-                cd $FCI_BUILD_DIR/ios
-                # agvtool new-version -all $(($BUILD_NUMBER + 1))
-                agvtool new-version -all $(($(app-store-connect get-latest-testflight-build-number "$APP_STORE_APP_ID") + 1))
-            - name: Set up code signing settings on Xcode project
-              script: |
-                xcode-project use-profiles --warn-only
-            - name: Build ipa for distribution
-              script: |
-                xcode-project build-ipa --workspace "$FCI_BUILD_DIR/ios/$XCODE_WORKSPACE" --scheme "$XCODE_SCHEME" 
-        artifacts:
-            - build/ios/ipa/*.ipa
-            - /tmp/xcodebuild_logs/*.log
-            - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
-            - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
-        publishing:
-          # See the following link for details about email publishing - https://docs.codemagic.io/publishing-yaml/distribution/#email
-          email:
-            recipients:
-              - user_1@example.com
-              - user_2@example.com
-            notify:
-              success: true     # To not receive a notification when a build succeeds
-              failure: false    # To not receive a notification when a build fails
-          slack: 
-            # See the following link about how to connect your Slack account - https://docs.codemagic.io/publishing-yaml/distribution/#slack
-            channel: '#channel-name'
-            notify_on_build_start: true   # To receive a notification when a build starts
-            notify:
-              success: true               # To not receive a notification when a build succeeds
-              failure: false              # To not receive a notification when a build fails
-          app_store_connect:                 
-            api_key: $APP_STORE_CONNECT_PRIVATE_KEY         # Contents of the API key, can also reference environment variable such as $APP_STORE_CONNECT_PRIVATE_KEY
-            key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER       # Alphanumeric value that identifies the API key, can also reference environment variable such as $APP_STORE_CONNECT_KEY_IDENTIFIER
-            issuer_id: $APP_STORE_CONNECT_ISSUER_ID         # Alphanumeric value that identifies who created the API key, can also reference environment variable such as $APP_STORE_CONNECT_ISSUER_ID
-            submit_to_testflight: false                     # Optional boolean, defaults to false. Whether or not to submit the uploaded build to TestFlight beta review. Required for distributing to beta groups. Note: This action is performed during post-processing.
-            # beta_groups:                                  # Specify the names of beta tester groups that will get access to the build once it has passed beta review. 
-            #      - group name 1
-            #      - group name 2  
+  expo-ios-testflight:
+    name: Expo iOS → TestFlight (no EAS, uses prebuild)
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+
+    environment:
+      groups:
+        # Must exist in Codemagic UI:
+        # - app_store_credentials: APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_PRIVATE_KEY
+        # - certificate_credentials: CERTIFICATE_PRIVATE_KEY (and any other signing secrets you store)
+        # - other: any extra vars your app needs (API keys, etc.)
+        - app_store_credentials
+        - certificate_credentials
+        - other
+      node: latest
+      xcode: latest
+      cocoapods: default
+
+    triggering:
+      events:
+        - push
+        - tag
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+        - pattern: master
+          include: true
+          source: true
+
+    scripts:
+      - name: Install Bun
+        script: |
+          set -euo pipefail
+          curl -fsSL https://bun.sh/install | bash
+          export BUN_INSTALL="$HOME/.bun"
+          export PATH="$BUN_INSTALL/bin:$PATH"
+          bun --version
+
+      - name: Install JS dependencies (mobile/)
+        script: |
+          set -euo pipefail
+          export BUN_INSTALL="$HOME/.bun"
+          export PATH="$BUN_INSTALL/bin:$PATH"
+          cd mobile
+          bun install
+
+      - name: Generate iOS project (Expo prebuild)
+        script: |
+          set -euo pipefail
+          export BUN_INSTALL="$HOME/.bun"
+          export PATH="$BUN_INSTALL/bin:$PATH"
+          cd mobile
+          bunx expo prebuild --platform ios --clean --no-install
+
+      - name: Install CocoaPods (mobile/ios)
+        script: |
+          set -euo pipefail
+          cd mobile/ios
+          pod install --repo-update
+
+      - name: Initialize keychain
+        script: |
+          set -euo pipefail
+          keychain initialize
+
+      - name: Fetch signing files from App Store Connect (App Store profile)
+        script: |
+          set -euo pipefail
+          # Get bundle id from app.json (avoids hardcoding)
+          BUNDLE_ID="$(node -e "console.log(require('./mobile/app.json').expo.ios.bundleIdentifier)")"
+          echo "BUNDLE_ID=$BUNDLE_ID"
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
+
+      - name: Add certificates to keychain
+        script: |
+          set -euo pipefail
+          keychain add-certificates
+
+      - name: Bump build number (timestamp, always increasing)
+        script: |
+          set -euo pipefail
+          BUILD_NUMBER="$(date +%Y%m%d%H%M)"
+          echo "BUILD_NUMBER=$BUILD_NUMBER"
+
+          # Find an Info.plist produced by prebuild and set CFBundleVersion
+          PLIST_PATH="$(find mobile/ios -maxdepth 5 -name Info.plist | head -n 1 || true)"
+          if [ -z "$PLIST_PATH" ]; then
+            echo "ERROR: Info.plist not found under mobile/ios"
+            find mobile/ios -maxdepth 4 -type f | head -n 200
+            exit 1
+          fi
+          echo "Using plist: $PLIST_PATH"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$PLIST_PATH" || \
+          /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_NUMBER" "$PLIST_PATH"
+
+      - name: Apply provisioning profiles to Xcode project
+        script: |
+          set -euo pipefail
+          xcode-project use-profiles --warn-only
+
+      - name: Build IPA (auto-detect workspace & scheme)
+        script: |
+          set -euo pipefail
+
+          WORKSPACE="$(ls -1 mobile/ios/*.xcworkspace | head -n 1 || true)"
+          if [ -z "$WORKSPACE" ]; then
+            echo "ERROR: .xcworkspace not found in mobile/ios"
+            ls -la mobile/ios || true
+            exit 1
+          fi
+          echo "WORKSPACE=$WORKSPACE"
+
+          # Extract first scheme from xcodebuild -list output (robust enough for CI)
+          SCHEME="$(xcodebuild -list -workspace "$WORKSPACE" | awk '
+            BEGIN{in_schemes=0}
+            /Schemes:/{in_schemes=1; next}
+            in_schemes && NF {gsub(/^[ \t]+|[ \t]+$/, "", $0); print $0; exit}
+          ')"
+          if [ -z "$SCHEME" ]; then
+            echo "ERROR: Could not detect scheme from workspace."
+            xcodebuild -list -workspace "$WORKSPACE" || true
+            exit 1
+          fi
+          echo "SCHEME=$SCHEME"
+
+          xcode-project build-ipa --workspace "$WORKSPACE" --scheme "$SCHEME"
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
+
+
+  expo-android-release:
+    name: Expo Android (no EAS, uses prebuild)
+    max_build_duration: 60
+    instance_type: linux_x2
+
+    environment:
+      groups:
+        # Must exist in Codemagic UI:
+        # - android_credentials: CM_KEYSTORE (base64), CM_KEYSTORE_PASSWORD, CM_KEY_ALIAS_USERNAME, CM_KEY_ALIAS_PASSWORD
+        # - other: any extra vars your app needs
+        - android_credentials
+        - other
+      node: latest
+
+    triggering:
+      events:
+        - push
+        - tag
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+        - pattern: master
+          include: true
+          source: true
+
+    scripts:
+      - name: Install Bun
+        script: |
+          set -euo pipefail
+          curl -fsSL https://bun.sh/install | bash
+          export BUN_INSTALL="$HOME/.bun"
+          export PATH="$BUN_INSTALL/bin:$PATH"
+          bun --version
+
+      - name: Install JS dependencies (mobile/)
+        script: |
+          set -euo pipefail
+          export BUN_INSTALL="$HOME/.bun"
+          export PATH="$BUN_INSTALL/bin:$PATH"
+          cd mobile
+          bun install
+
+      - name: Generate Android project (Expo prebuild)
+        script: |
+          set -euo pipefail
+          export BUN_INSTALL="$HOME/.bun"
+          export PATH="$BUN_INSTALL/bin:$PATH"
+          cd mobile
+          bunx expo prebuild --platform android --clean --no-install
+
+      - name: Set Android SDK location
+        script: |
+          set -euo pipefail
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$FCI_BUILD_DIR/mobile/android/local.properties"
+
+      - name: Set up keystore (from env group android_credentials)
+        script: |
+          set -euo pipefail
+          echo "$CM_KEYSTORE" | base64 --decode > /tmp/keystore.keystore
+          cat > "$FCI_BUILD_DIR/mobile/android/key.properties" <<EOF
+          storePassword=$CM_KEYSTORE_PASSWORD
+          keyPassword=$CM_KEY_ALIAS_PASSWORD
+          keyAlias=$CM_KEY_ALIAS_USERNAME
+          storeFile=/tmp/keystore.keystore
+          EOF
+
+      - name: Build Android Release (APK)
+        script: |
+          set -euo pipefail
+          cd mobile/android
+          ./gradlew assembleRelease
+
+    artifacts:
+      - mobile/android/app/build/outputs/**/*.apk
+      - mobile/android/app/build/outputs/**/*.aab
