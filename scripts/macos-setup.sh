@@ -134,8 +134,17 @@ print_success "Bun $BUN_VERSION ready"
 print_step "Checking CocoaPods installation..."
 
 if ! command -v pod &> /dev/null; then
-    print_warning "CocoaPods not found. Installing..."
-    sudo gem install cocoapods
+    print_warning "CocoaPods not found. Installing via Homebrew (avoids system Ruby 2.6 gem conflicts)..."
+    brew install cocoapods
+
+    # Refresh shell command lookup in case pod was just installed.
+    hash -r
+
+    if ! command -v pod &> /dev/null; then
+        print_error "CocoaPods installation failed. Homebrew installed but 'pod' is still unavailable in PATH."
+        print_error "Try restarting your terminal, then run: brew --prefix && which pod"
+        exit 1
+    fi
 else
     print_success "CocoaPods already installed"
 fi
