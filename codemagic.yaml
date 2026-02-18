@@ -19,6 +19,8 @@ workflows:
             - name: Install npm dependencies
               script: |
                 npm install
+                mkdir ios
+                cd ios
                 npx pod-install
             - name: Set Android SDK location
               script: |
