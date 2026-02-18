@@ -31,7 +31,7 @@ interface VoiceOption {
   identifier: string;
   name: string;
   language: string;
-  quality: string;
+  quality?: string;
 }
 
 interface LanguageOption {
@@ -53,12 +53,6 @@ const IOS_NATIVE_LANGUAGES: LanguageOption[] = [
   { code: "zh-CN", label: "Chinese (Simplified)" },
 ];
 
-const APP_LANGUAGES: { label: string; value: AppLanguage }[] = [
-  { label: "English", value: "en" },
-  { label: "Français (France)", value: "fr-FR" },
-  { label: "Français (Canada)", value: "fr-CA" },
-];
-
 export default function SettingsScreen() {
   const colorScheme = useColorScheme();
   const voiceSettings = useNarratorStore((state) => state.voiceSettings);
@@ -74,6 +68,15 @@ export default function SettingsScreen() {
   const [isLoadingVoices, setIsLoadingVoices] = useState<boolean>(true);
 
   const t = useTranslations(voiceSettings.appLanguage);
+
+  const appLanguages = useMemo<{ label: string; value: AppLanguage }[]>(
+    () => [
+      { label: t.english, value: "en" },
+      { label: t.frenchFrance, value: "fr-FR" },
+      { label: t.frenchCanadian, value: "fr-CA" },
+    ],
+    [t.english, t.frenchCanadian, t.frenchFrance],
+  );
 
   const loadVoices = useCallback(async () => {
     setIsLoadingVoices(true);
@@ -138,11 +141,9 @@ export default function SettingsScreen() {
 
   const onRunVoicePreview = () => {
     const preview =
-      voiceSettings.appLanguage === "fr-CA"
+      voiceSettings.language === "fr-CA" || voiceSettings.language === "fr-FR"
         ? "Bonjour! Ceci est un aperçu de votre voix native iOS."
-        : voiceSettings.appLanguage === "fr-FR"
-          ? "Bonjour! Ceci est un aperçu de votre voix native iOS."
-          : "Hello! This is a preview of your native iOS voice.";
+        : "Hello! This is a preview of your native iOS voice.";
 
     Speech.stop();
     Speech.speak(preview, {
@@ -202,8 +203,7 @@ export default function SettingsScreen() {
                 colorScheme === "dark" ? "text-slate-300" : "text-slate-600",
               )}
             >
-              Native iOS speech settings only: system languages, voices, and
-              built-in narration controls.
+              {t.nativeSpeechSettingsDescription}
             </Text>
           </View>
 
@@ -219,11 +219,11 @@ export default function SettingsScreen() {
                   colorScheme === "dark" ? "text-white" : "text-slate-900",
                 )}
               >
-                App Language
+                {t.appLanguage}
               </Text>
             </View>
             <View className="flex-row flex-wrap gap-2">
-              {APP_LANGUAGES.map((language) => (
+              {appLanguages.map((language) => (
                 <Pressable
                   key={language.value}
                   onPress={() =>
@@ -267,7 +267,7 @@ export default function SettingsScreen() {
                   colorScheme === "dark" ? "text-white" : "text-slate-900",
                 )}
               >
-                iOS Native Languages
+                {t.iosNativeLanguages}
               </Text>
             </View>
 
@@ -277,7 +277,7 @@ export default function SettingsScreen() {
                 colorScheme === "dark" ? "text-slate-300" : "text-slate-600",
               )}
             >
-              Current language: {selectedLanguageLabel}
+              {t.currentLanguage}: {selectedLanguageLabel}
             </Text>
 
             <ScrollView
@@ -329,7 +329,7 @@ export default function SettingsScreen() {
                   colorScheme === "dark" ? "text-white" : "text-slate-900",
                 )}
               >
-                Native Voice
+                {t.nativeVoice}
               </Text>
             </View>
 
@@ -340,7 +340,7 @@ export default function SettingsScreen() {
                   colorScheme === "dark" ? "text-slate-300" : "text-slate-600",
                 )}
               >
-                Loading iOS voices…
+                {t.loadingNativeVoices}
               </Text>
             ) : voicesForSelectedLanguage.length === 0 ? (
               <Text
@@ -349,8 +349,7 @@ export default function SettingsScreen() {
                   colorScheme === "dark" ? "text-slate-300" : "text-slate-600",
                 )}
               >
-                No native voice is currently available for this language on your
-                device.
+                {t.noNativeVoiceAvailable}
               </Text>
             ) : (
               <View className="gap-2">
@@ -385,7 +384,9 @@ export default function SettingsScreen() {
                           : "text-slate-600",
                       )}
                     >
-                      {voice.language} • {voice.quality}
+                      {voice.quality
+                        ? `${voice.language} • ${voice.quality}`
+                        : voice.language}
                     </Text>
                   </Pressable>
                 ))}
@@ -405,7 +406,7 @@ export default function SettingsScreen() {
                   colorScheme === "dark" ? "text-white" : "text-slate-900",
                 )}
               >
-                Speech Tuning
+                {t.speechTuning}
               </Text>
             </View>
 
@@ -415,7 +416,7 @@ export default function SettingsScreen() {
                 colorScheme === "dark" ? "text-slate-300" : "text-slate-600",
               )}
             >
-              Rate: {voiceSettings.rate.toFixed(1)}x
+              {t.speed}: {voiceSettings.rate.toFixed(1)}x
             </Text>
             <Slider
               value={voiceSettings.rate}
@@ -436,7 +437,7 @@ export default function SettingsScreen() {
                 colorScheme === "dark" ? "text-slate-300" : "text-slate-600",
               )}
             >
-              Pitch: {voiceSettings.pitch.toFixed(1)}x
+              {t.pitch}: {voiceSettings.pitch.toFixed(1)}x
             </Text>
             <Slider
               value={voiceSettings.pitch}
@@ -461,7 +462,7 @@ export default function SettingsScreen() {
                       : "text-slate-600",
                   )}
                 >
-                  Volume: {Math.round(voiceSettings.volume * 100)}%
+                  {t.volume}: {Math.round(voiceSettings.volume * 100)}%
                 </Text>
               </View>
               <Volume2
@@ -487,7 +488,7 @@ export default function SettingsScreen() {
               className="mt-4 items-center rounded-xl bg-blue-600 px-4 py-3"
             >
               <Text className="text-sm font-semibold text-white">
-                Play Voice Preview
+                {t.testVoice}
               </Text>
             </Pressable>
           </GlassCard>
@@ -504,7 +505,7 @@ export default function SettingsScreen() {
                   colorScheme === "dark" ? "text-white" : "text-slate-900",
                 )}
               >
-                Native iOS Helpers
+                {t.nativeIosHelpers}
               </Text>
             </View>
 
@@ -518,7 +519,7 @@ export default function SettingsScreen() {
                       : "text-slate-800",
                   )}
                 >
-                  Clipboard monitoring
+                  {t.clipboardMonitoring}
                 </Text>
                 <Text
                   className={cn(
@@ -528,7 +529,7 @@ export default function SettingsScreen() {
                       : "text-slate-600",
                   )}
                 >
-                  Auto-detect text copied in iOS and propose narration.
+                  {t.clipboardNativeDescription}
                 </Text>
               </View>
               <Switch
@@ -549,7 +550,7 @@ export default function SettingsScreen() {
                       : "text-slate-800",
                   )}
                 >
-                  Auto-fetch web article content
+                  {t.autoFetchWebContent}
                 </Text>
                 <Text
                   className={cn(
@@ -559,7 +560,7 @@ export default function SettingsScreen() {
                       : "text-slate-600",
                   )}
                 >
-                  Use native URL handling to prepare narration faster.
+                  {t.autoFetchNativeDescription}
                 </Text>
               </View>
               <Switch
@@ -576,10 +577,8 @@ export default function SettingsScreen() {
                 colorScheme === "dark" ? "text-slate-400" : "text-slate-500",
               )}
             >
-              Runtime:{" "}
-              {Platform.OS === "ios"
-                ? "iOS native speech active"
-                : "non-iOS fallback mode"}
+              {t.runtimeLabel}:{" "}
+              {Platform.OS === "ios" ? t.runtimeIosMode : t.runtimeFallbackMode}
             </Text>
           </GlassCard>
         </ScrollView>
