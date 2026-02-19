@@ -37,6 +37,7 @@ MOBILE_DIR="$WORKSPACE_DIR/mobile"
 # Build configuration
 SCHEME="noblenarrator"
 CONFIGURATION="Debug"  # Use "Release" for production
+BUILD_FOR_DEVICE=false
 WORKSPACE="$MOBILE_DIR/ios/${SCHEME}.xcworkspace"
 BUILD_DIR="$MOBILE_DIR/ios/build"
 
@@ -57,85 +58,57 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo "Unknown option: $1"
-            echo "Usage: $0 [--release] [--device|--simulator]"
+            echo "Usage: $0 [--release] [--simulator|--device]"
             exit 1
             ;;
     esac
 done
 
-cd "$MOBILE_DIR"
-
-###############################################################################
-# 1. Clean Previous Build
-###############################################################################
-
-print_step "Cleaning previous build..."
-
-if [ -d "$BUILD_DIR" ]; then
-    rm -rf "$BUILD_DIR"
+# Verify iOS project exists
+if [ ! -d "$MOBILE_DIR/ios" ]; then
+    print_error "iOS project not found. Run prebuild first:"
+    echo "  ./scripts/macos-prebuild.sh"
+    exit 1
 fi
 
-xcodebuild clean \
-    -workspace "$WORKSPACE" \
-    -scheme "$SCHEME" \
-    -configuration "$CONFIGURATION" \
-    > /dev/null 2>&1
+if [ ! -f "$WORKSPACE" ]; then
+    print_error "Xcode workspace not found: $WORKSPACE"
+    exit 1
+fi
 
-print_success "Clean complete"
+# Create build directory
+mkdir -p "$BUILD_DIR"
 
 ###############################################################################
-# 2. Build for Simulator or Device
+# Build for Simulator or Device
 ###############################################################################
+
+cd "$MOBILE_DIR/ios"
 
 if [ "$BUILD_FOR_DEVICE" = true ]; then
-    print_step "Building for iOS Device ($CONFIGURATION)..."
-
-    # Build for device (requires signing)
-    xcodebuild build \
+    print_step "Building for physical device ($CONFIGURATION)..."
+    
+    xcodebuild \
         -workspace "$WORKSPACE" \
         -scheme "$SCHEME" \
         -configuration "$CONFIGURATION" \
-        -destination 'generic/platform=iOS' \
+        -sdk iphoneos \
         -derivedDataPath "$BUILD_DIR" \
-        CODE_SIGN_IDENTITY="" \
-        CODE_SIGNING_REQUIRED=NO \
-        CODE_SIGNING_ALLOWED=NO
-
+        build
+    
     print_success "Device build complete"
-
 else
     print_step "Building for iOS Simulator ($CONFIGURATION)..."
-
-    # Get available simulators
-    SIMULATOR=$(xcrun simctl list devices available | grep "iPhone" | head -n 1 | sed 's/.*(\(.*\)).*/\1/')
-
-    if [ -z "$SIMULATOR" ]; then
-        print_error "No iOS simulator found"
-        exit 1
-    fi
-
-    print_step "Using simulator: $(xcrun simctl list devices | grep "$SIMULATOR" | sed 's/(.*//' | xargs)"
-
-    # Build for simulator
-    xcodebuild build \
+    
+    xcodebuild \
         -workspace "$WORKSPACE" \
         -scheme "$SCHEME" \
         -configuration "$CONFIGURATION" \
-        -destination "id=$SIMULATOR" \
-        -derivedDataPath "$BUILD_DIR"
-
+        -sdk iphonesimulator \
+        -derivedDataPath "$BUILD_DIR" \
+        build
+    
     print_success "Simulator build complete"
-fi
-
-###############################################################################
-# 3. Build Statistics
-###############################################################################
-
-print_step "Generating build statistics..."
-
-if [ -d "$BUILD_DIR" ]; then
-    BUILD_SIZE=$(du -sh "$BUILD_DIR" | cut -f1)
-    print_success "Build size: $BUILD_SIZE"
 fi
 
 ###############################################################################
@@ -144,19 +117,9 @@ fi
 
 echo ""
 echo "===================================="
-echo -e "${GREEN}✓ Build complete!${NC}"
+print_success "Build complete!"
 echo "===================================="
 echo ""
-echo "Build details:"
-echo "  • Configuration: $CONFIGURATION"
-echo "  • Target: $([ "$BUILD_FOR_DEVICE" = true ] && echo "iOS Device" || echo "iOS Simulator")"
-echo "  • Build directory: $BUILD_DIR"
-echo ""
-
-if [ "$BUILD_FOR_DEVICE" != true ]; then
-    echo "To run the app:"
-    echo "  1. Run: npx expo run:ios"
-    echo "  2. Or run from Xcode"
-fi
-
+echo "Next step: Run the app:"
+echo "  ./scripts/macos-run.sh"
 echo ""

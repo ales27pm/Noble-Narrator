@@ -48,17 +48,16 @@ print_success "Dependencies installed"
 # 2. Generate iOS Project with Expo Prebuild
 ###############################################################################
 
-print_step "Running Expo prebuild for iOS..."
+print_step "Generating iOS project with Expo prebuild..."
 
-# Clean previous iOS build if exists
+# Clean existing iOS folder if needed
 if [ -d "ios" ]; then
-    print_step "Cleaning previous iOS build..."
+    print_step "Cleaning existing iOS project..."
     rm -rf ios
 fi
 
-# Run prebuild
-npx expo prebuild --platform ios --clean
-
+# Generate iOS project
+bunx expo prebuild --platform ios --clean
 print_success "iOS project generated"
 
 ###############################################################################
@@ -66,68 +65,22 @@ print_success "iOS project generated"
 ###############################################################################
 
 print_step "Installing CocoaPods dependencies..."
-
 cd ios
-
-# Update CocoaPods repo (optional, can be slow)
-# pod repo update
-
-# Install pods
 pod install
-
 print_success "CocoaPods dependencies installed"
 
-cd "$MOBILE_DIR"
-
 ###############################################################################
-# 4. Link Native Module
+# 4. Verify Build Configuration
 ###############################################################################
 
-print_step "Verifying native module linking..."
+print_step "Verifying build configuration..."
 
-# The narrator-turbo module should be auto-linked by Expo
-# Check if it's in the Podfile
-if grep -q "narrator-turbo-module" ios/Podfile.lock; then
-    print_success "Native module linked successfully"
-else
-    print_error "Native module not linked. Check expo-module.config.js"
+if [ ! -f "${SCHEME}.xcworkspace" ]; then
+    print_error "Xcode workspace not found"
+    exit 1
 fi
 
-###############################################################################
-# 5. Configure Build Settings
-###############################################################################
-
-print_step "Configuring build settings..."
-
-# Create or update .xcode.env file for Node binary path
-cat > ios/.xcode.env.local << EOF
-export NODE_BINARY=$(command -v node)
-EOF
-
-print_success "Build settings configured"
-
-###############################################################################
-# 6. Verify Project Structure
-###############################################################################
-
-print_step "Verifying project structure..."
-
-REQUIRED_FILES=(
-    "ios/noblenarrator.xcworkspace"
-    "ios/Podfile"
-    "ios/Pods"
-    "modules/narrator-turbo/ios/NarratorTurboModule.swift"
-    "modules/narrator-turbo/narrator-turbo-module.podspec"
-)
-
-for file in "${REQUIRED_FILES[@]}"; do
-    if [ ! -e "$file" ]; then
-        print_error "Missing: $file"
-        exit 1
-    fi
-done
-
-print_success "Project structure verified"
+print_success "Build configuration verified"
 
 ###############################################################################
 # Summary
@@ -135,14 +88,9 @@ print_success "Project structure verified"
 
 echo ""
 echo "=========================================="
-echo -e "${GREEN}✓ Pre-build complete!${NC}"
+print_success "Prebuild complete!"
 echo "=========================================="
 echo ""
-echo "Project ready for compilation:"
-echo "  • iOS project: mobile/ios/noblenarrator.xcworkspace"
-echo "  • Native module: modules/narrator-turbo"
-echo "  • CocoaPods: Installed and configured"
-echo ""
-echo "Next step:"
-echo "  Run: ./scripts/macos-build.sh"
+echo "Next step: Build the app:"
+echo "  ./scripts/macos-build.sh"
 echo ""

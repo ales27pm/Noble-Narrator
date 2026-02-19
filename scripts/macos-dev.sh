@@ -51,30 +51,11 @@ if [ ! -d "ios/Pods" ]; then
 fi
 
 ###############################################################################
-# Start Development
+# Start Metro Bundler
 ###############################################################################
 
-print_step "Starting development environment..."
-echo ""
-echo "This will:"
-echo "  1. Start Metro bundler"
-echo "  2. Open iOS Simulator"
-echo "  3. Launch the app"
-echo ""
-echo "Press Ctrl+C to stop"
-echo ""
-
-# Start with clearing cache option
 print_step "Starting Metro bundler..."
+echo "Press Ctrl+C to stop Metro"
+echo ""
 
-# Ask if user wants to clear cache
-read -p "Clear Metro cache? (y/N): " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    print_step "Clearing cache..."
-    npx expo start --clear
-else
-    npx expo start
-fi
-
-print_success "Development server stopped"
+bunx expo start --ios

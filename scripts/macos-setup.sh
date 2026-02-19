@@ -7,6 +7,8 @@
 
 set -e  # Exit on error
 
+MACOS_MAJOR="$(sw_vers -productVersion | cut -d. -f1)"
+
 echo "🚀 Setting up macOS development environment for Noble Narrator"
 echo "================================================================"
 
@@ -48,9 +50,8 @@ print_success "Running on macOS"
 print_step "Checking Xcode installation..."
 
 if ! command -v xcodebuild &> /dev/null; then
-    print_error "Xcode is not installed"
-    echo "Please install Xcode from the App Store, then run:"
-    echo "  sudo xcode-select --install"
+    print_error "Xcode not found"
+    echo "Please install Xcode from the Mac App Store"
     exit 1
 fi
 
@@ -58,22 +59,15 @@ XCODE_VERSION=$(xcodebuild -version | head -n 1)
 print_success "Found $XCODE_VERSION"
 
 # Accept Xcode license if needed
-if ! sudo xcodebuild -license check &> /dev/null; then
-    print_warning "Xcode license needs to be accepted"
+print_step "Checking Xcode license..."
+if ! xcodebuild -license check &> /dev/null; then
+    print_warning "Xcode license not accepted. Accepting..."
     sudo xcodebuild -license accept
 fi
-
-# Install command line tools if needed
-if ! xcode-select -p &> /dev/null; then
-    print_step "Installing Xcode Command Line Tools..."
-    xcode-select --install
-    read -p "Press Enter after Command Line Tools installation completes..."
-fi
-
 print_success "Xcode setup complete"
 
 ###############################################################################
-# 2. Check Homebrew
+# 2. Install Homebrew
 ###############################################################################
 
 print_step "Checking Homebrew installation..."
@@ -81,30 +75,28 @@ print_step "Checking Homebrew installation..."
 if ! command -v brew &> /dev/null; then
     print_warning "Homebrew not found. Installing..."
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-    # Add Homebrew to PATH for Apple Silicon
-    if [[ $(uname -m) == "arm64" ]]; then
-        echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
-        eval "$(/opt/homebrew/bin/brew shellenv)"
-    fi
 else
     print_success "Homebrew already installed"
-    brew update
 fi
 
+# Update Homebrew
+print_step "Updating Homebrew..."
+brew update
+print_success "Homebrew updated"
+
 ###############################################################################
-# 3. Install Node.js via nvm
+# 3. Install Node.js
 ###############################################################################
 
 print_step "Checking Node.js installation..."
 
 if ! command -v node &> /dev/null; then
-    print_warning "Node.js not found. Installing via Homebrew..."
+    print_warning "Node.js not found. Installing..."
     brew install node
+else
+    NODE_VERSION=$(node --version)
+    print_success "Node.js $NODE_VERSION installed"
 fi
-
-NODE_VERSION=$(node --version)
-print_success "Node.js $NODE_VERSION installed"
 
 ###############################################################################
 # 4. Install Bun
@@ -115,11 +107,8 @@ print_step "Checking Bun installation..."
 if ! command -v bun &> /dev/null; then
     print_warning "Bun not found. Installing..."
     curl -fsSL https://bun.sh/install | bash
-
-    # Source bun
-    if [ -f "$HOME/.bun/bin/bun" ]; then
-        export PATH="$HOME/.bun/bin:$PATH"
-    fi
+    export BUN_INSTALL="$HOME/.bun"
+    export PATH="$BUN_INSTALL/bin:$PATH"
 else
     print_success "Bun already installed"
 fi
@@ -134,45 +123,26 @@ print_success "Bun $BUN_VERSION ready"
 print_step "Checking CocoaPods installation..."
 
 if ! command -v pod &> /dev/null; then
-    print_warning "CocoaPods not found. Installing via Homebrew (avoids system Ruby 2.6 gem conflicts)..."
-
-    if ! command -v brew &> /dev/null; then
-        print_error "Homebrew is required to install CocoaPods, but 'brew' is not available."
-        print_error "Install Homebrew first: https://brew.sh"
-        exit 1
-    fi
-
-    if ! brew install cocoapods; then
-        print_error "Failed to install CocoaPods via Homebrew. See brew output above for details."
-        exit 1
-    fi
-
-    # Refresh shell command lookup in bash in case pod was just installed.
-    hash -r 2>/dev/null || true
-
-    if ! command -v pod &> /dev/null; then
-        print_error "CocoaPods installation appears to have succeeded, but 'pod' is still unavailable in PATH."
-        print_error "Try restarting your terminal, then run: brew --prefix && which pod"
-        exit 1
-    fi
+    print_warning "CocoaPods not found. Installing..."
+    sudo gem install cocoapods
 else
+    POD_VERSION=$(pod --version)
     print_success "CocoaPods already installed"
+    print_success "CocoaPods $POD_VERSION ready"
 fi
 
-POD_VERSION=$(pod --version)
-print_success "CocoaPods $POD_VERSION ready"
-
 ###############################################################################
-# 6. Install iOS Simulators
+# 6. Check iOS Simulators
 ###############################################################################
 
 print_step "Checking iOS Simulators..."
 
-SIMULATORS=$(xcrun simctl list devices available | grep -c "iPhone" || true)
+SIMULATORS=$(xcrun simctl list devices available 2>/dev/null | grep -c "iPhone" || echo "0")
+
 if [ "$SIMULATORS" -eq 0 ]; then
     print_warning "No iOS simulators found"
-    echo "Opening Xcode to install simulators..."
-    echo "Go to: Xcode > Settings > Platforms"
+    echo "Please install iOS simulators in Xcode:"
+    echo "Xcode > Preferences > Components"
     open -a Xcode
 else
     print_success "Found $SIMULATORS iOS simulator(s)"
@@ -185,8 +155,14 @@ fi
 print_step "Checking Watchman installation..."
 
 if ! command -v watchman &> /dev/null; then
-    print_warning "Watchman not found. Installing for better file watching..."
-    brew install watchman
+    print_warning "Watchman not found."
+    if [ "$MACOS_MAJOR" -le 12 ]; then
+        print_warning "Skipping Watchman install on macOS 12 (Homebrew compiles heavy deps and often fails)."
+        print_warning "Metro can run without Watchman."
+    else
+        print_warning "Attempting Watchman install (optional)..."
+        brew install watchman || print_warning "Watchman install failed (ok). Continuing without it."
+    fi
 else
     print_success "Watchman already installed"
 fi
@@ -210,17 +186,13 @@ fi
 
 echo ""
 echo "================================================================"
-echo -e "${GREEN}✓ macOS development environment setup complete!${NC}"
+print_success "macOS development environment setup complete!"
 echo "================================================================"
 echo ""
-echo "Installed tools:"
-echo "  • Xcode: $XCODE_VERSION"
-echo "  • Node.js: $NODE_VERSION"
-echo "  • Bun: $BUN_VERSION"
-echo "  • CocoaPods: $POD_VERSION"
-echo ""
 echo "Next steps:"
-echo "  1. Run: cd mobile && bun install"
-echo "  2. Run: ./scripts/macos-prebuild.sh"
-echo "  3. Run: ./scripts/macos-build.sh"
+echo "1. Validate environment:"
+echo "   ./scripts/macos-validate.sh"
+echo ""
+echo "2. Run the full build pipeline:"
+echo "   ./scripts/macos-pipeline.sh"
 echo ""

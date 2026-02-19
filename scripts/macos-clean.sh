@@ -58,66 +58,57 @@ cd "$MOBILE_DIR"
 
 print_step "Removing build artifacts..."
 
-# iOS build folder
+# Remove iOS build directory
 if [ -d "ios/build" ]; then
     rm -rf ios/build
-    print_success "Removed ios/build"
+    print_success "Removed iOS build directory"
 fi
 
-# Xcode derived data
-if [ -d "ios/DerivedData" ]; then
-    rm -rf ios/DerivedData
-    print_success "Removed ios/DerivedData"
+# Remove derived data
+DERIVED_DATA="$HOME/Library/Developer/Xcode/DerivedData"
+if [ -d "$DERIVED_DATA" ]; then
+    print_warning "Xcode DerivedData exists (not removing by default)"
+    echo "  Location: $DERIVED_DATA"
+    echo "  Use --deep to remove"
 fi
 
-# Metro bundler cache
-if [ -d ".expo" ]; then
-    rm -rf .expo
-    print_success "Removed .expo cache"
-fi
+# Clean Expo cache
+print_step "Cleaning Expo cache..."
+bunx expo start --clear --minify 2>/dev/null || true
+print_success "Expo cache cleared"
 
-# Temporary files
-rm -rf /tmp/metro-* /tmp/react-* 2>/dev/null
-print_success "Removed Metro temp files"
-
-###############################################################################
-# Deep Clean (if requested)
-###############################################################################
-
+# Clean node_modules (optional in deep clean)
 if [ "$DEEP_CLEAN" = true ]; then
-    print_warning "Performing deep clean..."
-
+    print_step "Deep cleaning enabled..."
+    
     # Remove node_modules
     if [ -d "node_modules" ]; then
-        print_step "Removing node_modules (this may take a moment)..."
         rm -rf node_modules
         print_success "Removed node_modules"
     fi
-
+    
     # Remove iOS folder
     if [ -d "ios" ]; then
         rm -rf ios
-        print_success "Removed ios folder"
+        print_success "Removed iOS project folder"
     fi
-
-    # Remove Pods cache
-    if [ -d ~/Library/Caches/CocoaPods ]; then
-        print_step "Cleaning CocoaPods cache..."
-        rm -rf ~/Library/Caches/CocoaPods
-        print_success "Cleaned CocoaPods cache"
+    
+    # Remove bun lockfile
+    if [ -f "bun.lockb" ]; then
+        rm bun.lockb
+        print_success "Removed bun.lockb"
     fi
-
-    # Remove Watchman cache
-    if command -v watchman &> /dev/null; then
-        print_step "Cleaning Watchman cache..."
-        watchman watch-del-all
-        print_success "Cleaned Watchman cache"
+    
+    # Remove Xcode DerivedData
+    if [ -d "$DERIVED_DATA" ]; then
+        rm -rf "$DERIVED_DATA"
+        print_success "Removed Xcode DerivedData"
     fi
-
-    echo ""
-    print_warning "Deep clean complete. You'll need to rebuild:"
-    echo "  bun install"
-    echo "  ./scripts/macos-prebuild.sh"
+    
+    # Remove Metro cache
+    print_step "Removing Metro cache..."
+    rm -rf "$TMPDIR/metro-"* "$TMPDIR/haste-map-"* 2>/dev/null || true
+    print_success "Metro cache removed"
 fi
 
 ###############################################################################
@@ -126,15 +117,14 @@ fi
 
 echo ""
 echo "============================"
-echo -e "${GREEN}✓ Clean complete!${NC}"
+print_success "Clean complete!"
 echo "============================"
 echo ""
-
-if [ "$DEEP_CLEAN" = false ]; then
+if [ "$DEEP_CLEAN" = true ]; then
+    echo "Deep clean performed. Run setup and prebuild again:"
+    echo "  ./scripts/macos-setup.sh"
+    echo "  ./scripts/macos-prebuild.sh"
+else
     echo "Standard clean performed."
-    echo ""
-    echo "For deep clean (removes node_modules, ios/):"
-    echo "  ./scripts/macos-clean.sh --deep"
 fi
-
 echo ""

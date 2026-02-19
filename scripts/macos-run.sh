@@ -56,23 +56,20 @@ done
 # 1. List Available Simulators
 ###############################################################################
 
-print_step "Available iOS Simulators:"
-echo ""
-
-xcrun simctl list devices available | grep "iPhone" | nl
-
+print_step "Listing available iOS simulators..."
+xcrun simctl list devices available | grep -E "iPhone|== Devices ==" || true
 echo ""
 
 ###############################################################################
 # 2. Run on Simulator
 ###############################################################################
 
-if [ -n "$DEVICE_NAME" ]; then
-    print_step "Running on: $DEVICE_NAME"
-    npx expo run:ios --device "$DEVICE_NAME"
+if [ -z "$DEVICE_NAME" ]; then
+    print_step "Launching app on default simulator..."
+    bunx expo run:ios
+    print_success "App launched on simulator"
 else
-    print_step "Running on default simulator..."
-    npx expo run:ios
+    print_step "Launching app on simulator: $DEVICE_NAME"
+    bunx expo run:ios --device "$DEVICE_NAME"
+    print_success "App launched on $DEVICE_NAME"
 fi
-
-print_success "App launched"

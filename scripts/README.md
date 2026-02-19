@@ -23,8 +23,3 @@ Automated build scripts for macOS iOS development.
 
 # Daily development
 ./macos-dev.sh
-```
-
-## Full Documentation
-
-See [../docs/MACOS_BUILD_GUIDE.md](../docs/MACOS_BUILD_GUIDE.md) for complete documentation.
